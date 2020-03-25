@@ -5,10 +5,14 @@ import com.example.mvvm.model.PullRequest
 import com.example.mvvm.model.Repository
 import com.example.mvvm.network.NetworkService
 import com.example.mvvm.utils.Prefs
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 class AppRepository(
-    private val prefs: Prefs, private val networkService: NetworkService, private val appDatabase: AppDatabase
+    private val prefs: Prefs,
+    private val networkService: NetworkService,
+    private val appDatabase: AppDatabase
 ) {
 
     // Items per page for query
@@ -22,44 +26,63 @@ class AppRepository(
     }
 
     suspend fun getRepo(ownerName: String, repositoryName: String) =
-        networkService.getRepo(ownerName, repositoryName).await()
+        withContext(Dispatchers.IO) {
+            networkService.getRepo(ownerName, repositoryName).await()
+        }
 
-    suspend fun getRepoFromDB() = appDatabase.repositoryDao().getRepository()
+    suspend fun getRepoFromDB() =
+        withContext(Dispatchers.IO) {
+            appDatabase.repositoryDao().getRepository()
+        }
 
     suspend fun saveRepo(repository: Repository) {
-        appDatabase.repositoryDao().apply {
-            nukeTable()
-            insert(repository)
+        withContext(Dispatchers.IO) {
+            appDatabase.repositoryDao().apply {
+                nukeTable()
+                insert(repository)
+            }
         }
         prefs.setRepoSelected(true)
         prefs.setRepoName("${repository.ownerName}/${repository.name}")
+
+
     }
 
     suspend fun getPullRequests(page: Int): List<PullRequest> {
         val repo = getRepoFromDB()
-        val pullRequests = networkService.getPullRequests(
-            repo.ownerName,
-            repo.name,
-            page,
-            ITEMS_PER_PAGE,
-            REQUEST_STATE
-        ).await()
+        val pullRequests = withContext(Dispatchers.IO) {
+            networkService.getPullRequests(
+                repo.ownerName,
+                repo.name,
+                page,
+                ITEMS_PER_PAGE,
+                REQUEST_STATE
+            ).await()
+        }
+
         if (page == 1) {
             appDatabase.pullRequestDao().apply {
                 nukeTable()
                 insert(pullRequests)
             }
         }
+
         return pullRequests
     }
 
-    suspend fun getPullRequestsFromDB() = appDatabase.pullRequestDao().getPullRequests().reversed()
+    suspend fun getPullRequestsFromDB() {
+        withContext(Dispatchers.IO) {
+            appDatabase.pullRequestDao().getPullRequests().reversed()
+        }
+    }
 
     fun getRepositoryName() = prefs.getRepoName()
 
     suspend fun changeRepository() {
-        appDatabase.pullRequestDao().nukeTable()
-        appDatabase.repositoryDao().nukeTable()
+        withContext(Dispatchers.IO) {
+            appDatabase.pullRequestDao().nukeTable()
+            appDatabase.repositoryDao().nukeTable()
+        }
         prefs.setRepoSelected(false)
     }
 }
